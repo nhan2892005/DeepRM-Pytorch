@@ -11,7 +11,8 @@ from node import Node
 from task import Task
 from schedule import CompactScheduler
 from schedule import SpreadScheduler
-from schedule import DeepRMScheduler
+from deeprm_keras import DeepRMScheduler
+from deeprm_torch import DeepRMSchedulerTorch
 
 
 class Environment(object):

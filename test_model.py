@@ -9,9 +9,9 @@ class TorchCNNModel(nn.Module):
 
     def __init__(self, input_shape, output_shape):
         super(TorchCNNModel, self).__init__()
-
-        self.path_model = '__cache__/model/deeprm.pth'
-        self.conv1 = nn.Conv2d(input_shape[0], 16, 3, padding=1)
+        print(input_shape)
+        self.model_path = '__cache__/model/deeprm.pth'
+        self.conv1 = nn.Conv2d(kernel_size=(3, 3), stride=1, padding='same', out_channels=16, in_channels=1)
         self.pool = nn.MaxPool2d(2, 2)
         self.dropout = nn.Dropout(0.2)
         self.flatten = nn.Flatten()
@@ -20,10 +20,13 @@ class TorchCNNModel(nn.Module):
 
     def forward(self, x):
         """Forward pass."""
+        print(x.shape)
         x = func.relu(self.conv1(x))
         x = self.pool(x)
         x = self.dropout(x)
+        print(x.shape)
         x = self.flatten(x)
+        print(x.shape)
         x = func.relu(self.fc1(x))
         x = self.fc2(x)
         return x
@@ -39,23 +42,24 @@ class TorchCNNModel(nn.Module):
         self.load_state_dict(torch.load(self.model_path))
     
     def _compute_flatten_size(self, input_shape):
-        """Compute the size of the flattened features after convolution and pooling."""
-        # Create a dummy input to calculate the flattened size
+    # Create a dummy input to calculate the flattened size
         with torch.no_grad():
             x = torch.zeros(1, *input_shape)  # Batch size 1
-            x = func.relu(self.conv1(x))
-            x = self.pool(x)
-            return x.numel()  # Get total number of elements
+            x = func.relu(self.conv1(x))  # Apply convolution
+            x = self.pool(x)  # Apply pooling
+            x = self.dropout(x)  # Apply dropout
+            x = self.flatten(x)  # Flatten the output
+            return x.shape[1]  # Return the number of features after flattening
 
 # Define input and output shapes
-input_shape = (3, 64, 64)  # (channels, height, width)
-output_shape = 10  # Number of classes or output size
+input_shape = (10, 400)  # (height, width, channels)
+output_shape = 31  # Number of classes or output size
 
 # Initialize the model
 model = TorchCNNModel(input_shape, output_shape)
 
 # Example input
-x = torch.randn(8, *input_shape)  # Batch size of 8
+x = torch.randn(1, *input_shape)  # Batch size of 8
 output = model(x)
 
 print("Output shape:", output.shape)
