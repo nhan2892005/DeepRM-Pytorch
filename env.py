@@ -12,7 +12,7 @@ from task import Task
 from schedule import CompactScheduler
 from schedule import SpreadScheduler
 from deeprm_keras import DeepRMScheduler
-from deeprm_torch import DeepRMSchedulerTorch
+from deeprm import ReinforceScheduler
 
 
 class Environment(object):
@@ -73,11 +73,11 @@ class Environment(object):
         r = 0
         for node in self.nodes:
             if node.scheduled_tasks:
-                r += 1/sum([task[0].duration for task in node.scheduled_tasks])
+                r += (1/sum([task[0].duration for task in node.scheduled_tasks]))
         if self.queue:
-            r += 1/sum([task.duration for task in self.queue])
+            r += (1/sum([task.duration for task in self.queue]))
         if self.backlog:
-            r += 1/sum([task.duration for task in self.backlog])
+            r += (1/sum([task.duration for task in self.backlog]))
         return -r
 
     def summary(self, bg_shape=None):
@@ -160,7 +160,7 @@ def load(load_environment=True, load_scheduler=True):
             elif 'SpreadScheduler' == data['scheduler']:
                 scheduler = SpreadScheduler(environment)
             else:
-                scheduler = DeepRMScheduler(environment, data['train'])
+                scheduler = ReinforceScheduler(environment, data['train'])
         return (environment, scheduler)
 
 
