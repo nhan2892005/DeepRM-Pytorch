@@ -13,6 +13,7 @@ from schedule import CompactScheduler
 from schedule import SpreadScheduler
 from deeprm_keras import DeepRMScheduler
 from deeprm import ReinforceScheduler
+import pygame
 
 
 class Environment(object):
@@ -137,7 +138,125 @@ class Environment(object):
     def __repr__(self):
         return 'Environment(timestep_counter={0}, nodes={1}, queue={2}, backlog={3})'.format(self.timestep_counter, self.nodes, self.queue, self.backlog)
 
+    def get_rgb_frame(self):
+        """Generate RGB frame for visualization using pygame."""
+        if not pygame.get_init():
+            pygame.init()
+        if not pygame.font.get_init():
+            pygame.font.init()
 
+        # Constants 
+        CELL_SIZE = 20  
+        SECTION_PADDING = 40 
+        MAX_WIDTH = 1480  # Maximum width constraint
+        MAX_HEIGHT = 1480  # Maximum height constraint
+        
+        # Calculate dimensions
+        state = self.summary()
+        node_height = min(state.shape[0] * CELL_SIZE, MAX_HEIGHT - 2 * SECTION_PADDING)
+        node_width = min((state.shape[1] // (len(self.nodes) + 1)) * CELL_SIZE, 
+                        (MAX_WIDTH - SECTION_PADDING * (len(self.nodes) + 1)) // (len(self.nodes) + 1))
+        
+        # Calculate total dimensions
+        total_width = min((node_width + SECTION_PADDING) * (len(self.nodes) + 1), MAX_WIDTH)
+        total_height = min(node_height + 2 * SECTION_PADDING, MAX_HEIGHT)
+        
+        # Create pygame surface
+        surface = pygame.Surface((total_width, total_height))
+        surface.fill((240, 240, 240))
+        
+        # Generate unique colors for each task
+        task_colors = {}
+        for node in self.nodes:
+            for task, _ in node.scheduled_tasks:
+                if task.label not in task_colors:
+                    task_colors[task.label] = task.color
+
+        # Draw node states (clusters)
+        x_offset = SECTION_PADDING
+        for node_idx, node in enumerate(self.nodes):
+            # Draw node label
+            font = pygame.font.Font(None, 36)
+            text = font.render(f"Node {node_idx+1}", True, (0, 0, 0))
+            surface.blit(text, (x_offset, 10))
+            
+            # Draw node resources matrix
+            y_offset = SECTION_PADDING
+            for i, matrix in enumerate(node.state_matrices):
+                for row in range(matrix.shape[0]):
+                    for col in range(matrix.shape[1]):
+                        rect = pygame.Rect(
+                            x_offset + col * CELL_SIZE, 
+                            y_offset + row * CELL_SIZE,
+                            CELL_SIZE - 2,
+                            CELL_SIZE - 2
+                        )
+                        
+                        # Find task using this slot
+                        cell_color = (255, 255, 255)
+                        for task, _ in node.scheduled_tasks:
+                            if matrix[row, col] == 0:
+                                cell_color = task_colors.get(task.label, (200, 200, 200))
+                                
+                        pygame.draw.rect(surface, cell_color, rect)
+                        pygame.draw.rect(surface, (0, 0, 0), rect, 1)
+                
+                y_offset += matrix.shape[0] * CELL_SIZE + 10
+            
+            x_offset += node_width + SECTION_PADDING
+
+        # Draw queue section
+        font = pygame.font.Font(None, 36)
+        text = font.render("Queue", True, (0, 0, 0))
+        surface.blit(text, (x_offset, 10))
+
+        # Draw queue as a matrix
+        queue_y = SECTION_PADDING
+        max_resources = max([max(task.resources) for task in self.queue]) if self.queue else 1
+        
+        for i, task in enumerate(self.queue):
+            task_color = task_colors.get(task.label, (200, 200, 200))
+            
+            # Draw task resources as matrix
+            for res_idx, res in enumerate(task.resources):
+                for r in range(res):
+                    rect = pygame.Rect(
+                        x_offset + r * CELL_SIZE,
+                        queue_y + (i * task.duration + res_idx) * CELL_SIZE,
+                        CELL_SIZE - 2,
+                        CELL_SIZE - 2
+                    )
+                    pygame.draw.rect(surface, task_color, rect)
+                    pygame.draw.rect(surface, (0, 0, 0), rect, 1)
+            
+            # Draw task label
+            text = font.render(task.label, True, (0, 0, 0))
+            label_x = x_offset + (max_resources + 1) * CELL_SIZE
+            label_y = queue_y + (i * task.duration) * CELL_SIZE
+            surface.blit(text, (label_x, label_y))
+
+        # Draw backlog count
+        backlog_text = font.render(f"Backlog: {len(self.backlog)} tasks", True, (0, 0, 0))
+        surface.blit(backlog_text, (x_offset, total_height - 30))
+
+        # Convert to RGB array with reduced size
+        frame = pygame.surfarray.array3d(surface)
+        # Ensure consistent dimensions
+        frame = frame.swapaxes(0, 1)
+        return frame
+    
+    def _render_(self):
+        """Render environment frame."""
+        frame = self.get_rgb_frame()
+        # # Display using pygame
+        # if not hasattr(self, 'screen'):
+        #     pygame.init()
+        #     self.screen = pygame.display.set_mode(frame.shape[:2])
+        # surf = pygame.surfarray.make_surface(frame)
+        # self.screen.blit(surf, (0, 0))
+        # pygame.display.flip()
+        return frame
+    
 def load(load_environment=True, load_scheduler=True):
     """Load environment and scheduler from conf/env.conf.json"""
     tasks = _load_tasks()
@@ -160,8 +279,9 @@ def load(load_environment=True, load_scheduler=True):
             elif 'SpreadScheduler' == data['scheduler']:
                 scheduler = SpreadScheduler(environment)
             else:
-                scheduler = ReinforceScheduler(environment, data['train'])
+                scheduler = DeepRMScheduler(environment, data['train'])
         return (environment, scheduler)
+        
 
 
 def _load_tasks():

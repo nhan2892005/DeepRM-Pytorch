@@ -16,8 +16,8 @@ class CNNModel(tf.keras.Model):
 
     def __init__(self, input_shape, output_shape):
         super(CNNModel, self).__init__()
-        if os.path.isfile('__cache__/model/deeprm.keras'):
-            self.model = tf.keras.models.load_model('__cache__/model/deeprm.keras')
+        if os.path.isfile('__cache__/model/deeprm.h5'):
+            self.model = tf.keras.models.load_model('__cache__/model/deeprm.h5')
         else:
             self.model = Sequential([
                 Conv2D(16, (3, 3), padding='same', activation='relu', input_shape=input_shape),
@@ -37,7 +37,7 @@ class CNNModel(tf.keras.Model):
         """Save model."""
         if not os.path.exists('__cache__/model'):
             os.makedirs('__cache__/model')
-        self.model.save('__cache__/model/deeprm.keras')
+        self.model.save('__cache__/model/deeprm.h5')
 
 class DQN(object):
     """DQN Implementation."""

@@ -10,12 +10,15 @@ import torch.optim as optim
 from torch.distributions import Categorical
 from schedule import Scheduler, Action
 from collections import deque
+import random
 
 class PolicyNetwork(nn.Module):
     """Policy Network for REINFORCE algorithm."""
     
     def __init__(self, input_shape, output_shape):
         super(PolicyNetwork, self).__init__()
+        self.input_shape = input_shape
+        self.output_shape = output_shape
         
         # CNN layers
         self.conv1 = nn.Conv2d(1, 16, kernel_size=3, padding=1)
@@ -50,32 +53,6 @@ class PolicyNetwork(nn.Module):
         # Output probabilities
         return F.softmax(x, dim=1)
 
-class Trainer(object):
-    def __init__(self, model):
-        self.model = model
-        self.learning_rate = 0.01
-        self.gamma = 1
-        self.optimizer = optim.Adam(model.paramaters(),lr=self.learning_rate)
-        self.criterion = nn.CrossEntropyLoss()
-    
-    def train_step(self, state, action, reward, next_state, run_step):
-        prediction = self.model(state)
-
-        target = prediction.clone()
-
-        pass
-
-class Schdueler(Scheduler):
-    def __init__(self, environment, train = True):
-        self.run_step = 0
-        self.epsilon = 0
-        self.memo = deque(maxlen=100_000)
-
-        self.input_shape = (environment.summary().shape[0], environment.summary().shape[1])
-        self.output_shape = environment.queue_size * len(environment.nodes) + 1
-        self.model = PolicyNetwork(input_shape=self.input_shape, output_shape=self.output_shape)
-        self.trainer = Trainer(self.model)
-
 class ReinforceScheduler(Scheduler):
     """Scheduler using REINFORCE algorithm."""
 
@@ -86,11 +63,17 @@ class ReinforceScheduler(Scheduler):
         # Add batch size and memory management
         self.batch_size = 32
         self.max_memory = 10000
+        self.lr = 3e-4
+        self.eps = 1e-8
+        self.max_episodes = 10000
+        self.early_stop_patience = 1000
+        self.max_steps = 10000
 
         # Initialize network
         input_shape = (environment.summary().shape[0], environment.summary().shape[1])
         output_shape = environment.queue_size * len(environment.nodes) + 1
         self.policy = PolicyNetwork(input_shape, output_shape).to(self.device)
+        self.optimizer = optim.Adam(self.policy.parameters(), lr=self.lr)
         
         if os.path.exists('__cache__/model/reinforce.pth'):
             self.policy.load_state_dict(torch.load('__cache__/model/reinforce.pth'))
@@ -104,7 +87,13 @@ class ReinforceScheduler(Scheduler):
             state = torch.FloatTensor(state).to(self.device)
             # Enable gradient tracking
             with torch.enable_grad():
+                # Get action probabilities
                 probs = self.policy(state.unsqueeze(0))
+                
+                # Add exploration noise
+                noise = torch.rand_like(probs) * 0.1
+                probs = F.softmax(probs + noise, dim=-1)
+            
                 m = Categorical(probs)
                 action = m.sample()
                 # Save log probability with gradient tracking
@@ -114,6 +103,7 @@ class ReinforceScheduler(Scheduler):
                     torch.cuda.empty_cache()
                     
                 return action.item()
+            
         except Exception as e:
             print(f"Error in select_action: {e}")
             return 0  # Return safe default
@@ -147,15 +137,15 @@ class ReinforceScheduler(Scheduler):
                 policy_loss = policy_loss - log_prob * R  # Negative for gradient ascent
                 
             # Only backpropagate if we have a valid loss
-            if isinstance(policy_loss, torch.Tensor):
+            # if isinstance(policy_loss, torch.Tensor):
                 # Optimize
-                optimizer.zero_grad()
-                policy_loss.backward()
+            optimizer.zero_grad()
+            policy_loss.backward()
                 
                 # Clip gradients
-                torch.nn.utils.clip_grad_norm_(self.policy.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(self.policy.parameters(), max_norm=1.0)
                 
-                optimizer.step()
+            optimizer.step()
             
             # Clear memory
             self.policy.saved_log_probs = []
@@ -208,52 +198,56 @@ class ReinforceScheduler(Scheduler):
 
     def train(self, num_episodes=10000, lr=1e-3):
         """Train with memory optimization and early stopping."""
-        optimizer = torch.optim.Adam(self.policy.parameters(), lr=lr)
-        early_stop_patience = 50
-        best_reward = float('-inf')
+        if num_episodes is None:
+            num_episodes = self.max_episodes
+            
+        running_reward = 0
+        best_reward = float(-33.54)
         patience_counter = 0
         
         # try:
         for episode in range(num_episodes):
                 self.environment, _ = env.load(load_scheduler=False)
                 episode_reward = 0
+                state = self.environment.summary()
                 
-                count_time_step = 0
-                while not self.environment.terminated():
-                    state = self.environment.summary()
+                for step in range(self.max_steps):
+                # while not self.environment.terminated():
                     action = self.select_action(state)
-                    
-                    # Process batch of actions
-                    if len(self.policy.saved_log_probs) >= self.batch_size:
-                        self.finish_episode(optimizer)
                     
                     task_index, node_index = self._explain(action)
                     if self._execute_action(task_index, node_index):
                         reward = self.environment.reward()
+                        reward = reward * 0.1
                         episode_reward += reward
                         self.policy.rewards.append(reward)
                     
                     self.environment.timestep()
-
-                    count_time_step += 1
-                    if count_time_step > 10000:
-                        self.finish_episode(optimizer)
+                    state = self.environment.summary()
+                    if self.environment.terminated():
+                        self._save_model()
                         break
-                
-                # Early stopping check
+
+                    if len(self.policy.saved_log_probs) >= self.batch_size:
+                        self.finish_episode(self.optimizer)
+
+                running_reward = 0.05 * episode_reward + (1 - 0.05) * running_reward
+
                 if episode_reward > best_reward:
                     best_reward = episode_reward
                     patience_counter = 0
                     self._save_model()
                     print(f"New best reward: {best_reward:.2f}")
-                else:
                     patience_counter += 1
-                    if patience_counter >= early_stop_patience:
+                else:
+                    if patience_counter >= self.early_stop_patience:
                         print(f"Early stopping at episode {episode}")
                         break
-                
+
                 if episode % 10 == 0:
                     print(f'Episode {episode}, Reward: {episode_reward:.2f}')
+                
+                
                     
         #except Exception as e:
             #print(f"Training error: {e}")

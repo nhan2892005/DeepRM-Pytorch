@@ -4,6 +4,7 @@ import os
 
 import numpy as np
 from PIL import Image
+import random
 
 
 class Task(object):
@@ -14,6 +15,11 @@ class Task(object):
         self.duration = duration
         self.label = label
         self.dimension = len(resources)
+        self.color = (
+                        random.randint(100, 255),
+                        random.randint(100, 255),
+                        random.randint(100, 255)
+                     )
 
     def summary(self, bg_shape=None):
         """State representation."""
