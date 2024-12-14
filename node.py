@@ -20,6 +20,11 @@ class Node(object):
         # state matrices, 0 stands for occupied slot, 255 stands for vacant slot
         self.state_matrices = [np.full((duration, resource), 255, dtype=np.uint8) for resource in resources]
         self._state_matrices_capacity = [[resource]*duration for resource in resources]
+        # New task type tracking matrices
+        self.task_type_matrices = [
+            np.full((duration, resource), None, dtype=object)
+            for resource in resources
+        ]
 
     def schedule(self, task):
         """Schedule task on node."""
@@ -32,7 +37,7 @@ class Node(object):
         else:
             # success, update node state
             for i in range(task.dimension):
-                self._occupy(self.state_matrices[i], self._state_matrices_capacity[i], task.resources[i], task.duration, start_time)
+                self._occupy(self.state_matrices[i], self._state_matrices_capacity[i], task.resources[i], task.duration, start_time, task, self.task_type_matrices[i])
             self.scheduled_tasks.append((task, self.timestep_counter+task.duration))
             return True
 
@@ -45,6 +50,10 @@ class Node(object):
             temp = np.delete(self.state_matrices[i], (0), axis=0)
             temp = np.append(temp, np.array([[255 for x in range(temp.shape[1])]]), axis=0)
             self.state_matrices[i] = temp
+            # Update task type matrix
+            temp_task = np.delete(self.task_type_matrices[i], (0), axis=0)
+            temp_task = np.append(temp_task, np.array([[None for x in range(temp_task.shape[1])]]), axis=0)
+            self.task_type_matrices[i] = temp_task
         for i in range(self.dimension):
             self._state_matrices_capacity[i].pop(0)
             self._state_matrices_capacity[i].append(self.resources[i])
@@ -88,11 +97,14 @@ class Node(object):
         else:
             return -1
 
-    def _occupy(self, state_matrix, state_matrix_capacity, required_resource, required_duration, start_time):
+    def _occupy(self, state_matrix, state_matrix_capacity, required_resource, required_duration, start_time, task = None, task_matrix = None):
         """Occupy state matrix slots for required resources and duration."""
         for i in range(start_time, start_time+required_duration):
             for j in range(required_resource):
-                state_matrix[i, len(state_matrix[i])-state_matrix_capacity[i]+j] = 0
+                pos = len(state_matrix[i])-state_matrix_capacity[i]+j
+                state_matrix[i, pos] = 0
+                if task_matrix is not None and task is not None:
+                    task_matrix[i, pos] = task  # Store entire task object
             state_matrix_capacity[i] = state_matrix_capacity[i] - required_resource
 
     def _expand(self, matrix, bg_shape=None):

@@ -202,7 +202,7 @@ class ReinforceScheduler(Scheduler):
             num_episodes = self.max_episodes
             
         running_reward = 0
-        best_reward = float(-33.54)
+        best_reward = float('-inf')
         patience_counter = 0
         
         # try:

@@ -146,10 +146,11 @@ class Environment(object):
             pygame.font.init()
 
         # Constants 
-        CELL_SIZE = 20  
-        SECTION_PADDING = 40 
-        MAX_WIDTH = 1480  # Maximum width constraint
-        MAX_HEIGHT = 1480  # Maximum height constraint
+        CELL_SIZE = 30  
+        SECTION_PADDING = 50 
+        MAX_WIDTH = 2100  # Maximum width constraint
+        MAX_HEIGHT = 1500  # Maximum height constraint
+        NODE_PADDING = 60  # Padding between nodes
         
         # Calculate dimensions
         state = self.summary()
@@ -158,8 +159,8 @@ class Environment(object):
                         (MAX_WIDTH - SECTION_PADDING * (len(self.nodes) + 1)) // (len(self.nodes) + 1))
         
         # Calculate total dimensions
-        total_width = min((node_width + SECTION_PADDING) * (len(self.nodes) + 1), MAX_WIDTH)
-        total_height = min(node_height + 2 * SECTION_PADDING, MAX_HEIGHT)
+        total_width = max((node_width + SECTION_PADDING) * (len(self.nodes) + 1), MAX_WIDTH)
+        total_height = max(node_height + 2 * SECTION_PADDING, MAX_HEIGHT)
         
         # Create pygame surface
         surface = pygame.Surface((total_width, total_height))
@@ -193,10 +194,13 @@ class Environment(object):
                         )
                         
                         # Find task using this slot
-                        cell_color = (255, 255, 255)
-                        for task, _ in node.scheduled_tasks:
-                            if matrix[row, col] == 0:
-                                cell_color = task_colors.get(task.label, (200, 200, 200))
+                        if node.state_matrices[i][row, col] == 0:
+                            cell_color = node.task_type_matrices[i][row, col].color
+                        else:
+                            cell_color = (255, 255, 255)
+                        # for task, _ in node.scheduled_tasks:
+                        #    if matrix[row, col] == 0:
+                        #        cell_color = task_colors.get(task.label, (200, 200, 200))
                                 
                         pygame.draw.rect(surface, cell_color, rect)
                         pygame.draw.rect(surface, (0, 0, 0), rect, 1)
@@ -213,27 +217,40 @@ class Environment(object):
         # Draw queue as a matrix
         queue_y = SECTION_PADDING
         max_resources = max([max(task.resources) for task in self.queue]) if self.queue else 1
-        
+        TASK_PADDING = 12
+        cache_x = x_offset
+
         for i, task in enumerate(self.queue):
-            task_color = task_colors.get(task.label, (200, 200, 200))
+            task_color = task.color
+            # Calculate y position with padding
+            task_y = queue_y
+            x_offset = cache_x
             
             # Draw task resources as matrix
             for res_idx, res in enumerate(task.resources):
-                for r in range(res):
-                    rect = pygame.Rect(
-                        x_offset + r * CELL_SIZE,
-                        queue_y + (i * task.duration + res_idx) * CELL_SIZE,
-                        CELL_SIZE - 2,
-                        CELL_SIZE - 2
-                    )
-                    pygame.draw.rect(surface, task_color, rect)
-                    pygame.draw.rect(surface, (0, 0, 0), rect, 1)
-            
+                for durat in range(task.duration):
+                    for r in range(res):
+                        # print(f'x:{x_offset + r * CELL_SIZE}, y:{task_y + (res_idx + durat) * CELL_SIZE}')
+                        rect = pygame.Rect(
+                            x_offset + r * CELL_SIZE,
+                            task_y + durat * CELL_SIZE,
+                            CELL_SIZE - 2,
+                            CELL_SIZE - 2
+                        )
+                        pygame.draw.rect(surface, task_color, rect)
+                        pygame.draw.rect(surface, (0, 0, 0), rect, 1)
+                x_offset += (res) * CELL_SIZE + TASK_PADDING
+
+            x_offset = cache_x
+            task_y += (task.duration) * CELL_SIZE + TASK_PADDING
             # Draw task label
             text = font.render(task.label, True, (0, 0, 0))
-            label_x = x_offset + (max_resources + 1) * CELL_SIZE
-            label_y = queue_y + (i * task.duration) * CELL_SIZE
+            label_x = x_offset
+            label_y = task_y
             surface.blit(text, (label_x, label_y))
+
+            # Update y position
+            queue_y = task_y + TASK_PADDING +CELL_SIZE
 
         # Draw backlog count
         backlog_text = font.render(f"Backlog: {len(self.backlog)} tasks", True, (0, 0, 0))
