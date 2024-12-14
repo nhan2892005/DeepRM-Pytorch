@@ -219,7 +219,7 @@ class ReinforceScheduler(Scheduler):
                     if self._execute_action(task_index, node_index):
                         reward = self.environment.reward()
                         reward = reward * 0.1
-                        episode_reward += reward
+                        episode_reward += self.environment.reward()
                         self.policy.rewards.append(reward)
                     
                     self.environment.timestep()
@@ -231,6 +231,7 @@ class ReinforceScheduler(Scheduler):
                     if len(self.policy.saved_log_probs) >= self.batch_size:
                         self.finish_episode(self.optimizer)
 
+                print(f'Episode {episode}, Reward: {episode_reward:.2f}')
                 running_reward = 0.05 * episode_reward + (1 - 0.05) * running_reward
 
                 if episode_reward > best_reward:
