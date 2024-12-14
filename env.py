@@ -11,7 +11,6 @@ from node import Node
 from task import Task
 from schedule import CompactScheduler
 from schedule import SpreadScheduler
-from deeprm_keras import DeepRMScheduler
 from deeprm import ReinforceScheduler
 import pygame
 
@@ -296,7 +295,7 @@ def load(load_environment=True, load_scheduler=True):
             elif 'SpreadScheduler' == data['scheduler']:
                 scheduler = SpreadScheduler(environment)
             else:
-                scheduler = DeepRMScheduler(environment, data['train'])
+                scheduler = ReinforceScheduler(environment, data['train'])
         return (environment, scheduler)
         
 
