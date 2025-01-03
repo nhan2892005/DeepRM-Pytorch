@@ -79,6 +79,7 @@ class DQN(object):
         with tf.GradientTape() as tape:
             predicted_values = tf.math.reduce_sum(self.predict(states) * tf.one_hot(actions, self.num_actions), axis=1)
             loss = tf.math.reduce_sum(tf.square(actual_values - predicted_values))
+            print('Loss: {0}'.format(loss))
 
         # apply gradient descent to update train model
         variables = self.model.trainable_variables
@@ -87,9 +88,12 @@ class DQN(object):
 
     def get_action(self, states, epsilon):
         """Predict action according to state (espilon for exploration)."""
-        if np.random.random() < epsilon:
+        ran_num = np.random.random()
+        if ran_num < epsilon:
+            # print('{0} < {1}'.format(ran_num, epsilon))
             return np.random.choice(self.num_actions)
         else:
+            # print('{0} >= {1}'.format(ran_num, epsilon))
             return np.argmax(self.predict(np.array([states]))[0])
 
     def add_experience(self, exp):
@@ -119,9 +123,9 @@ class DeepRMTrainer(object):
         self.episodes = 10000
         self.copy_steps = 32
         self.save_steps = 32
-        self.epsilon = 0.99
-        self.decay = 0.99
-        self.min_epsilon = 0.1
+        self.epsilon = 0.6
+        self.decay = 0.9
+        self.min_epsilon = 0.05
         input_shape = (environment.summary().shape[0], environment.summary().shape[1], 1)
         output_shape = environment.queue_size
         self.dqn_train = DQN(input_shape, output_shape)
